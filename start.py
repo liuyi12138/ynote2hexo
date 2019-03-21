@@ -7,18 +7,21 @@ import os
 import shutil
 import hashlib
 import commands
+import Queue
+
+import threading
 
 reload(sys)
 sys.setdefaultencoding('utf8')
 
 # Hexo 文件夹
-HEXO_DIR = '/Users/go_songs/Documents/fuckblog/source/_posts'
+HEXO_DIR = '/home/liuyi/Desktop/1'
 
 # 登录有道云笔记后存储在 Cookie 里的值
-YNOTE_PERS = 'v2|urstoken||YNOTE||web||-1||1498882067319||116.226.216.207||go_songs@163.com||k5RfzEOMqFRPy0Hq4hLzG0gBnfY5PMgL06ZhMz5nH64RQyOMYWnHqS0YM64eBkM6B0e4nfq4nMUf0QB6LJK6LzWR'
-YNOTE_SESS = 'v2|8r8rH29TFWpFhHgZ6MeL0wFPLPS6LgyRwLkfzfOMY50kf0LqFkMzERlEnfzWk4gLRUY0Lwz64pz0qLhLPFP4quRlY6LPz6MU50'
-YNOTE_LOGIN = '3||1498882067334'
-CSTK = 'Jukb45Yq'
+YNOTE_PERS = 'v2|cqq||YNOTE||web||7776000000||1553092933721||115.156.142.129||qq7265F91BB452AB2B63C3B07B55887AEB||eShHUMhLTZ0l5OMp4646z0JL6LPynMTy0QZOLkGnMe40JFOLqSh4JyROG0Mw4h4zA0zYOMgZ6Lg4RgFPLpBP46uR'
+YNOTE_SESS = 'v2|3H29AJgmLRgykfkERMOY06FhHUGRMqL0lGnMQuPLwFRYm6MTF0LJuRzfhLQ4P4zW0z50MpKOfzY0q4OfUGO4pz0pBkLU5RHJLR'
+YNOTE_LOGIN = '5||1553093006110'
+CSTK = 'qd9PNsay'
 
 HEADERS = {
     'Accept-Encoding':
@@ -45,9 +48,10 @@ HEADERS = {
 }
 
 
-# 获取所有的笔记本
-def getAllBooks():
-    data = {'path': '/', 'dirOnly': True, 'f': True, 'cstk': CSTK}
+
+# 获取某笔记本下所有的笔记本
+def getBooks(path):
+    data = {'path': path, 'dirOnly': True, 'f': True, 'cstk': CSTK}
     url = 'https://note.youdao.com/yws/api/personal/file?method=listEntireByParentPath&cstk={CSTK}&keyfrom=web'.format(
         CSTK=CSTK)
     res = requests.post(url, data=data, headers=HEADERS)
@@ -61,12 +65,38 @@ def getAllBooks():
                     'name': i['fileEntry']['name'],
                     'id': i['fileEntry']['id']
                 })
+        print(len(books))
         return books
     else:
-        exit('getAllBooks')
+        exit('getBooks')
 
 
-# 根据笔记本下的笔记
+
+# 获取所有的笔记本
+def getAllBooks():
+    ids = Queue.Queue()
+    ids.put('/')
+    books = []
+    while not ids.empty():
+        print(ids.queue)
+        tempId = ids.get()
+        tempBooks = getBooks(tempId)
+        for book in tempBooks:
+            if tempId == '/':
+                aId = tempId + book['id']
+            else:
+                aId = tempId + '/' + book['id']
+            ids.put(aId)
+            books.append({
+                'name': book['name'],
+                'id': book['id']
+            })
+    print ('allbooks')
+    print(len(books))
+    return books
+
+
+# 获取笔记本下的笔记
 def getAllNotes(book):
     url = 'https://note.youdao.com/yws/api/personal/file/{id}?all=true&cstk={CSTK}&f=true&isReverse=false&keyfrom=web&len=30&method=listPageByParentId&sort=1'.format(
         id=book['id'], CSTK=CSTK)
@@ -124,11 +154,11 @@ def getNoteDetail(note):
 def writeMd(detail):
     print('写入: {name}'.format(name=detail['name']))
     with open('_posts/' + detail['name'], 'w') as f:
-        f.write('---\n')
-        f.write('title: {title}\n'.format(title=detail['name'][:-3]))
-        f.write('date: {data}\n'.format(data=detail['time']))
-        f.write('tags: {tag}\n'.format(tag=detail['tag']))
-        f.write('---\n\n\n')
+        # f.write('---\n')
+        # f.write('title: {title}\n'.format(title=detail['name'][:-3]))
+        # f.write('date: {data}\n'.format(data=detail['time']))
+        # f.write('tags: {tag}\n'.format(tag=detail['tag']))
+        # f.write('---\n\n\n')
         f.write(detail['content'])
         f.write('\n')
 
@@ -183,16 +213,19 @@ def start():
     if os.path.exists('_posts'):
         shutil.rmtree(r'_posts')
     os.mkdir(r'_posts')
-
     books = getAllBooks()
     for i in books:
         notes = getAllNotes(i)
+        print(len(notes))
         for j in notes:
             detail = getNoteDetail(j)
             writeMd(detail)
     deployHexo()
 
+    t = threading.Timer(432000, start) 
+    t.start() 
 
 if __name__ == '__main__':
     start()
     # time.sleep(24 * 60 * 60)
+    # nohup python youdaoToHexo.py & (守护进程)
